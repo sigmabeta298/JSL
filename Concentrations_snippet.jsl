@@ -1,0 +1,47 @@
+function_new_tb = Function(
+						{this},
+						(main_win = this << Parent;
+						i++;
+						main_win << SibAppend(Line Up Box(NCol(3),
+							Text Box("Standard"),
+							Eval( Parse( Eval Insert("\[
+								var^i^ = Number Edit Box()
+							]\"))),
+							Button Box("+", 
+								<<setFunction(function_new_tb);
+							)
+						))
+						);
+					);
+
+user_inputs = New Window("Define concentrations",
+	<< Modal,
+	<< Return Result,
+	<< Size(200,200),
+	V List Box(
+		Line Up Box(NCol(3),
+			Text Box("Standard"), first_std=Number Edit Box(), 
+			i = 0;
+			b = Button Box("+", 
+				<<setFunction(
+					function_new_tb;
+				)
+			)
+		),
+		H List Box(
+			Button Box("OK"),
+			Button Box("Cancel")
+		)
+	)
+);
+first_std = user_inputs["first_std"];
+the_values = {first_std};
+for (j = 1, j<= i, j++,
+	the_index = j+1;
+	Eval( Parse( Eval Insert("\[
+								the_values = Insert(the_values, var^j^ << Get, the_index);
+								]\")))
+);
+Eval list(the_values);
+
+
