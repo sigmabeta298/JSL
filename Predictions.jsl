@@ -1,0 +1,173 @@
+Names Default To Here(1);
+launchWin = New Window("Mutation Prediction",
+	about = Outline Box("About",
+		tb = Text Box ("JMP add-in to suggest mutation positions which contribute positively or negatively
+						Contact smbk@novozymes for any support"),
+		user_manual = Button Box("User Manual")
+	),
+	step0box = Outline Box("Step 0: Import Files",
+		tb = Text Box( "Open file"),
+		import_file = Button Box("Open File")
+	),
+	
+	step1box = Outline Box("Step 1: Clean up for analysis",
+		tb = Text Box( "Basic cleaning of raw data" ),
+		file_clean = Button Box("Prepare Data")
+	),
+	
+	step2box = Outline Box("Step 2: Calculations",
+		tb = Text Box( "Please check columns before clicking" ),
+		calc_button = Button Box("Calculate")
+	)
+	
+	
+	
+);
+
+user_manual << Set Script(
+	open("$ADDIN_HOME(com.novozymes.screenz)\Mutation_selector_user_manual.docx";)
+);
+
+import_file << Set Script (
+	names = Pick File(
+	"Open excel file from with mutations",
+	"C:\",
+	{"Excel Files|xls;xlsx;xlsm", "All Files|*"},
+	0,
+	0,
+	0,
+	0
+	);
+
+	dt = Open(
+		names,
+		Use for all sheets( 1 ),
+		Concatenate Worksheets( 1 ),
+		Create Concatenation Column( 0 ),
+		Worksheet Settings(
+			1,
+			Has Column Headers( 1 ),
+			Number of Rows in Headers( 1 ),
+			Headers Start on Row( 1 ),
+			Data Starts on Row( 2 ),
+			Data Starts on Column( 1 ),
+			Data Ends on Row( 0 ),
+			Data Ends on Column( 0 ),
+			Replicated Spanned Rows( 0 ),
+			Suppress Hidden Rows( 0 ),
+			Suppress Hidden Columns( 0 ),
+			Suppress Empty Columns( 0 ),
+			Treat as Hierarchy( 0 )
+		)
+	);
+	
+	dt << Set Name( "Mutations_raw" );
+);
+
+file_clean << Set Script(
+	dt = Data Table("Mutations_raw");
+	
+	parse_dialog = Column Dialog(
+		split_col = Col List("Mutations column",
+			Min Col(1),
+			Max Col(1)
+		)
+	);
+
+	dt << Text to Columns(
+		delimiter(","),
+		columns(parse_dialog["split_col"]),
+		Indicator Columns(1)
+	) ;
+	
+);
+
+create_journal = Function ( {the_obj},
+
+	journal_win = New Window( "Mutations of interest",
+		Outline Box("Introduction",
+			Text Box("Based on the inputs entered, the various mutation positions have been statistically modelled to find positions of interest")
+		),
+		Outline Box("Interpreting the results",
+			tb0 = Text Box("Below are the sorted parameter estimates."),
+			tb1 = Text Box("The positions having a p-value (last column in the table) <= 0.01 have a very statistical significance, that of a 99% confidence interval. "),
+			tb2 = Text Box("Those with p-value <= 0.05 are also statistically significant, with a confidence interval of 95%. "),
+			tb3 = Text Box("The value of the estimate itself indicates whether the effect was a postive or a negative one"),
+			tb4 = Text Box("A statistically significant negative effect could be a position that you might want to avoid in your molecule")
+		),
+		
+		Journal Box( the_obj )
+	);
+	tb1 << Bullet Point( 1 );
+
+	tb2 << Bullet Point( 1 );
+	tb3 << Bullet Point( 1 );
+	tb4 << Bullet Point (1);
+	//journal_win << Save PDF("report.pdf",1,1);
+);
+
+
+calc_button << Set Script(
+	dt = Current Data Table();
+
+	endCol = N Col(dt);
+	
+	//Select first and last column, invert and set modelling type to continuous
+	Column(dt, 1) << Set Selected(1);
+	Column(dt, endCol) << Set Selected(1);
+	dt << Invert Column Selection;
+	sel_cols = dt << Get Selected Columns;
+	for (i=1, i<=N Items(sel_cols), i++,
+		sel_cols[i] << Set Modeling Type(Continuous);
+	);
+	
+	obj =Fit Model(
+			Y( Column(endCol) ),
+			Effects( eval(sel_cols) ),
+			Personality("Stepwise"),
+			Run( Stopping Rule( Minimum AICc ) )
+			);
+	obj << Remove All;
+	obj << Direction( Forward );
+	obj << Go;
+	Wait(25);
+	obj_mod = obj << Run Model;
+	obj_mod << Box Cox Y Transformation(1, Save Best Transformation( 1 ));
+	
+	new_endCol = N Col(dt);
+	
+	obj_nxt = Fit Model(
+				Y( Column(new_endCol) ),
+				Effects( eval(sel_cols) ),
+				Personality("Stepwise"),
+				Run( Stopping Rule( Minimum AICc ) )
+			);
+	obj_nxt << Remove All;
+	obj_nxt << Direction( Forward );
+	obj_nxt << Go;
+	Wait(25);
+	obj_mod1 = obj_nxt << Run Model;
+	obj_mod1 << Sorted Estimates(1);
+	
+	
+	obj_report = obj_mod1 << report;
+	journal_obj = obj_report[1]["Sorted Parameter Estimates"];
+	journal_box_obj = journal_obj << Get Journal;
+	
+	//journal_obj << Journal;
+	
+	create_journal(journal_box_obj);
+	wait(1);
+	obj<<Close Window;
+	obj_mod<<Close Window;
+	obj_nxt<<Close Window;
+	obj_mod1 << Close Window;
+	
+	
+	
+	
+	
+	//sorted_estimates <<Save PDF("");
+	
+);
+
