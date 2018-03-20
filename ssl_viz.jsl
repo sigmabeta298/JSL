@@ -1,0 +1,144 @@
+Names Default To Here(1);
+launchWin = New Window("The SSL Viz",
+	about = Outline Box("About",
+		tb = Text Box ("Visualize SSL based mutations to extract useful information.
+						Contact smbk@novozymes for any support"),
+		//user_manual = Button Box("User Manual")
+	),
+	step0box = Outline Box("Step 0: Import Files",
+		tb = Text Box( "Open file"),
+		import_file = Button Box("Open File")
+	),
+	
+	step1box = Outline Box("Step 1: Plate Visualization",
+		viz_graph = Button Box("Visualize SSL")
+	),
+	
+);
+
+import_file << Set Script (
+	names = Pick File(
+	"Open excel file",
+	"C:\",
+	{"Excel Files|xls;xlsx;xlsm", "All Files|*"},
+	0,
+	0,
+	0,
+	0
+	);
+
+	dt = Open(
+		names,
+		Use for all sheets( 1 ),
+		Concatenate Worksheets( 1 ),
+		Create Concatenation Column( 0 ),
+		Worksheet Settings(
+			1,
+			Has Column Headers( 1 ),
+			Number of Rows in Headers( 1 ),
+			Headers Start on Row( 1 ),
+			Data Starts on Row( 2 ),
+			Data Starts on Column( 1 ),
+			Data Ends on Row( 0 ),
+			Data Ends on Column( 0 ),
+			Replicated Spanned Rows( 0 ),
+			Suppress Hidden Rows( 1 ),
+			Suppress Hidden Columns( 1 ),
+			Suppress Empty Columns( 1 ),
+			Treat as Hierarchy( 0 )
+		)
+	);
+	
+	dt << Set Name( "Raw_data" );
+	launchWin << Bring Window to Front;
+);
+
+viz_graph << Set Script (
+	grp_sel = Column Dialog(
+		mut = Col List("Mutation",
+			Min Col(1),
+			Max Col(1)
+		),
+		resp = Col List("Response",
+			Min Col(1)
+        ),
+        wel_no = Col List("Well no. (optional)",
+        	Max Col(1)
+        )
+	);
+	dt = Data Table("Raw_data");
+	dt << Subset(
+		Output Table("Viz_data"),
+		All rows,
+		columns(grp_sel["mut"], grp_sel["resp"], grp_sel["wel_no"])
+	);
+	
+	Column(grp_sel["mut"]) << Set Name("Mutation");
+	Column(grp_sel["resp"]) << Set Name("Resp");
+	//Column(grp_sel["wel_no"]) << Set Name("WellNo");
+	
+	work_dt = Data Table("Viz_data");
+	work_dt << New Column("Old_aa");
+	work_dt << New Column("Position", Numeric, None);
+	work_dt << New Column("New_aa");
+	work_dt << New Column("resp_status", Character);
+	
+	For Each Row(work_dt:Old_aa = Word(1,work_dt:Mutation, "0123456789"));
+	For Each Row(work_dt:Position = num(regex(work_dt:Mutation, "\D", "", Globalreplace)));
+	For Each Row(work_dt:New_aa = Word(2,work_dt:Mutation, "0123456789"));
+	
+	work_dt << Sort(by(:Position), Ascending, Replace Table);
+	//Column(work_dt, "Position") << Data Type(Character);
+
+	For Each Row(work_dt:resp_status = If(:resp == Col Maximum(:resp, :Position),
+		"Highest",
+		If(:resp == Col Minimum(:resp, :Position),
+			"Lowest",
+		)
+	));
+	
+	work_dt:Resp << Label;
+	
+	
+	gb = Graph Builder(
+		Size( 1435, 750 ),
+		Show Control Panel( 0 ),
+		Variables( 
+			X( :Position ),
+			X( :Old_aa, Position( 1 ) ), 
+			Y( :New_aa ), 
+			Color( :resp_status ) 
+		),
+		Elements( Points( X(1), X(2), Y, Legend( 11 ) ) ),
+		SendToReport(
+			Dispatch( {}, "Position", ScaleBox, {Label Row( Show Major Grid( 1 ) )} ),
+			Dispatch( {}, "New_aa", ScaleBox, {Label Row( Show Major Grid( 1 ) )} ),
+			Dispatch(
+				{},
+				"400",
+				ScaleBox,
+				{Legend Model(
+					11,
+					Properties( 0, {Marker( "Circle" )} ),
+					Properties( 1, {Marker( "Circle" )} )
+				)}
+			),
+			Dispatch(
+				{},
+				"X title",
+				TextEditBox,
+				{Set Text( "Position" )}
+			),
+			Dispatch( {}, "Y title", TextEditBox, {Set Text( "Replaced Amino Acid" )} ),
+			Dispatch( {}, "400", LegendBox, {Set Title( "Response" )} )
+		)
+	);
+	
+	work_dt << Select Where(work_dt:resp_status != "");
+	Report(gb)[framebox(1)] << Row Label(1);
+	
+	work_dt << Select All Rows;
+	work_dt << Invert Row Selection;
+	
+);
+
